@@ -2,181 +2,30 @@
 <html lang="ja">
 <head>
     <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>紀勢本線：学習各駅停車</title>
-    <style>
-        body {
-            background-color: #1a1a1a; color: #f0f0f0;
-            font-family: 'Helvetica Neue', sans-serif; display: flex; flex-direction: column;
-            align-items: center; padding: 20px; margin: 0;
-        }
-        #display-board {
-            background-color: #000; border: 4px solid #0055aa; border-radius: 15px;
-            padding: 20px; width: 95%; max-width: 500px; box-shadow: 0 0 20px rgba(0,85,170,0.3);
-            position: relative;
-        }
-        #timer-display {
-            position: absolute; top: 20px; right: 20px;
-            font-family: monospace; color: #00ff00; font-size: 1.2rem;
-        }
-        .status-badge {
-            display: inline-block; padding: 2px 10px; border-radius: 3px;
-            font-size: 0.8rem; font-weight: bold; margin-bottom: 10px;
-        }
-        .status-driving { background-color: #0055aa; color: #fff; }
-        .status-stopped { background-color: #666; color: #fff; }
-        
-        .station-name {
-            font-size: 2.2rem; color: #fff; text-align: center;
-            margin: 10px 0; font-weight: bold;
-        }
-        .next-info { text-align: right; color: #00aaff; font-size: 0.9rem; margin-top: 10px; min-height: 1.2em;}
-        
-        .progress-container {
-            width: 100%; background-color: #222; height: 12px;
-            margin: 15px 0; border-radius: 6px; overflow: hidden;
-        }
-        #progress-bar { width: 0%; height: 100%; background: linear-gradient(90deg, #0055aa, #00aaff); transition: 0.1s; }
-        
-        .controls { display: flex; gap: 10px; margin-top: 20px; }
-        button {
-            padding: 15px 30px; font-size: 1.2rem; cursor: pointer;
-            border: none; border-radius: 8px; font-weight: bold; flex: 1;
-        }
-        #start { background-color: #28a745; color: #fff; }
-        #stop { background-color: #dc3545; color: #fff; }
-        button:disabled { background-color: #444; color: #888; }
-        
-        #total-display { font-size: 0.9rem; color: #aaa; margin-bottom: 10px; }
-        .line-name { color: #00aaff; font-weight: bold; margin-bottom: 5px; }
-    </style>
+    <title>IIDA LINE - GEOSPATIAL CONTROL</title>
+    <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" />
+    <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
+    <link href="https://fonts.googleapis.com/css2?family=Share+Tech+Mono&display=swap" rel="stylesheet">
+    <link rel="stylesheet" href="style.css">
 </head>
 <body>
-
-    <div class="line-name">JR紀勢本線（きのくに線）各駅停車</div>
-    <div id="total-display">本日の乗車時間累計: <span id="total-min" style="color:#fff;">0</span> 分</div>
-
-    <div id="display-board">
-        <div id="timer-display">00:00</div>
-        <div id="status-tag" class="status-badge status-stopped">待機中</div>
-        <div style="font-size: 0.8rem; color: #888;">現在駅（第 <span id="st-count">1</span> 駅）</div>
-        <div class="station-name" id="current-station">亀山</div>
-        
-        <div class="progress-container"><div id="progress-bar"></div></div>
-        <div class="next-info" id="next-info">「出発」で運転開始</div>
+    <div id="side-panel">
+        <div class="module">
+            <div class="label">MISSION CLOCK</div>
+            <div class="timer-val" id="timer">00:00</div>
+            <button id="start">ENGAGE</button>
+        </div>
+        <div class="module">
+            <div class="label">CURRENT POSITION</div>
+            <div id="cur-st-jp" style="font-size: 1.5rem;">辰野</div>
+            <div id="progress-pc" style="color: #00ffcc;">0.00%</div>
+        </div>
+        <div id="log-display"></div>
     </div>
 
-    <div class="controls">
-        <button id="start">Start</button>
-        <button id="stop" disabled>Stop</button>
-    </div>
+    <div id="map"></div>
 
-<script>
-// 紀勢本線 全駅データ（亀山〜和歌山市）
-// run: 前駅からの走行時間(分), wait: 停車時間(分)
-const KISEI_LINE = [
-    {name:"亀山", run:0, wait:2}, {name:"下庄", run:6, wait:1}, {name:"一身田", run:7, wait:1}, {name:"津", run:6, wait:2},
-    {name:"阿漕", run:4, wait:1}, {name:"高茶屋", run:5, wait:1}, {name:"六軒", run:6, wait:1}, {name:"松阪", run:6, wait:3},
-    {name:"徳和", run:4, wait:1}, {name:"多気", run:5, wait:4}, {name:"相可", run:4, wait:1}, {name:"佐奈", run:5, wait:1},
-    {name:"栃原", run:7, wait:1}, {name:"川添", run:5, wait:1}, {name:"三瀬谷", run:8, wait:1}, {name:"滝原", run:6, wait:1},
-    {name:"阿曽", run:4, wait:1}, {name:"伊勢柏崎", run:6, wait:1}, {name:"大内山", run:7, wait:1}, {name:"梅ケ谷", run:8, wait:1},
-    {name:"紀伊長島", run:12, wait:3}, {name:"三野瀬", run:7, wait:1}, {name:"船津", run:7, wait:1}, {name:"相賀", run:5, wait:1},
-    {name:"尾鷲", run:6, wait:2}, {name:"大曽根浦", run:4, wait:1}, {name:"九鬼", run:7, wait:1}, {name:"三木里", run:6, wait:1},
-    {name:"賀田", run:6, wait:1}, {name:"二木島", run:5, wait:1}, {name:"新鹿", run:6, wait:1}, {name:"波田須", run:4, wait:1},
-    {name:"大泊", run:5, wait:1}, {name:"熊野市", run:4, wait:3}, {name:"有井", run:3, wait:1}, {name:"神志山", run:5, wait:1},
-    {name:"紀伊市木", run:3, wait:1}, {name:"阿田和", run:4, wait:1}, {name:"紀伊井田", run:4, wait:1}, {name:"鵜殿", run:5, wait:1},
-    {name:"新宮", run:5, wait:10}, {name:"三輪崎", run:6, wait:1}, {name:"紀伊佐野", run:3, wait:1}, {name:"宇久井", run:4, wait:1},
-    {name:"那智", run:5, wait:1}, {name:"紀伊天満", run:2, wait:1}, {name:"紀伊勝浦", run:2, wait:3}, {name:"湯川", run:4, wait:1},
-    {name:"太地", run:3, wait:1}, {name:"下里", run:5, wait:1}, {name:"紀伊浦神", run:5, wait:1}, {name:"紀伊田原", run:6, wait:1},
-    {name:"古座", run:6, wait:1}, {name:"紀伊姫", run:4, wait:1}, {name:"串本", run:4, wait:3}, {name:"紀伊有田", run:5, wait:1},
-    {name:"田並", run:4, wait:1}, {name:"田子", run:3, wait:1}, {name:"和深", run:4, wait:1}, {name:"江住", run:7, wait:1},
-    {name:"見老津", run:7, wait:1}, {name:"周参見", run:10, wait:2}, {name:"紀伊日置", run:10, wait:1}, {name:"椿", run:8, wait:1},
-    {name:"紀伊富田", run:6, wait:1}, {name:"白浜", run:5, wait:5}, {name:"朝来", run:6, wait:1}, {name:"紀伊新庄", run:4, wait:1},
-    {name:"紀伊田辺", run:4, wait:5}, {name:"芳養", run:5, wait:1}, {name:"南部", run:6, wait:1}, {name:"岩代", run:6, wait:1},
-    {name:"切目", run:5, wait:1}, {name:"印南", run:5, wait:1}, {name:"稲原", run:7, wait:1}, {name:"和佐", run:5, wait:1},
-    {name:"道成寺", run:6, wait:1}, {name:"御坊", run:3, wait:3}, {name:"紀伊内原", run:5, wait:1}, {name:"紀伊由良", run:6, wait:1},
-    {name:"広川ビーチ", run:7, wait:1}, {name:"湯浅", run:4, wait:2}, {name:"藤並", run:4, wait:1}, {name:"紀伊宮原", run:5, wait:1},
-    {name:"箕島", run:5, wait:2}, {name:"初島", run:4, wait:1}, {name:"下津", run:4, wait:1}, {name:"加茂郷", run:4, wait:1},
-    {name:"冷水浦", run:4, wait:1}, {name:"海南", run:4, wait:2}, {name:"黒江", run:3, wait:1}, {name:"紀伊中ノ島", run:7, wait:1},
-    {name:"和歌山", run:3, wait:5}, {name:"紀和", run:4, wait:1}, {name:"和歌山市", run:4, wait:999}
-];
-
-const TIMELINE = [];
-let total = 0;
-KISEI_LINE.forEach(st => {
-    total += st.run;
-    TIMELINE.push({name: st.name, time: total, type: "arrival", index: KISEI_LINE.indexOf(st)+1});
-    total += st.wait;
-    TIMELINE.push({name: st.name, time: total, type: "departure", index: KISEI_LINE.indexOf(st)+1});
-});
-
-let startAt = null;
-let timerInterval = null;
-const todayKey = () => "sum_kisei_" + new Date().toISOString().slice(0,10);
-const getSum = () => Number(localStorage.getItem(todayKey()) || 0);
-const setSum = v => localStorage.setItem(todayKey(), v);
-
-const updateDisplay = (tempSum) => {
-    const sum = tempSum !== undefined ? tempSum : getSum();
-    document.getElementById("total-min").textContent = Math.floor(sum);
-
-    let currentEvent = TIMELINE[0];
-    let nextEvent = TIMELINE.find(ev => ev.time > sum);
-    for (let ev of TIMELINE) { if (sum >= ev.time) currentEvent = ev; }
-
-    document.getElementById("current-station").textContent = currentEvent.name;
-    document.getElementById("st-count").textContent = currentEvent.index;
-
-    const stTag = document.getElementById("status-tag");
-    const nextInfo = document.getElementById("next-info");
-    const progressBar = document.getElementById("progress-bar");
-
-    if (currentEvent.type === "arrival") {
-        stTag.textContent = "停車中"; stTag.className = "status-badge status-stopped";
-    } else {
-        stTag.textContent = "走行中"; stTag.className = "status-badge status-driving";
-    }
-
-    if (nextEvent) {
-        const remainingMin = nextEvent.time - sum;
-        const rMin = Math.floor(remainingMin);
-        const rSec = Math.floor((remainingMin - rMin) * 60);
-        nextInfo.innerHTML = `次${nextEvent.type === "arrival" ? '着' : '発'}まで: ${rMin}分${rSec.toString().padStart(2,'0')}秒`;
-        
-        const prevTime = TIMELINE[TIMELINE.indexOf(nextEvent)-1]?.time || 0;
-        progressBar.style.width = ((sum - prevTime) / (nextEvent.time - prevTime)) * 100 + "%";
-    } else {
-        nextInfo.textContent = "終点：和歌山市 到着！";
-        progressBar.style.width = "100%";
-    }
-};
-
-document.getElementById("start").onclick = () => {
-    startAt = Date.now();
-    document.getElementById("start").disabled = true;
-    document.getElementById("stop").disabled = false;
-    timerInterval = setInterval(() => {
-        const elapsedSec = (Date.now() - startAt) / 1000;
-        const mm = Math.floor(elapsedSec / 60).toString().padStart(2, '0');
-        const ss = Math.floor(elapsedSec % 60).toString().padStart(2, '0');
-        document.getElementById("timer-display").textContent = `${mm}:${ss}`;
-        updateDisplay(getSum() + (elapsedSec / 60));
-    }, 500);
-};
-
-document.getElementById("stop").onclick = () => {
-    if (!startAt) return;
-    clearInterval(timerInterval);
-    const addMin = (Date.now() - startAt) / 60000;
-    setSum(getSum() + addMin);
-    startAt = null;
-    document.getElementById("start").disabled = false;
-    document.getElementById("stop").disabled = true;
-    document.getElementById("timer-display").textContent = "00:00";
-    updateDisplay();
-};
-
-updateDisplay();
-</script>
+    <script src="data.js"></script>
+    <script src="app.js"></script>
 </body>
 </html>
