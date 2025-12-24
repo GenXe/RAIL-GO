@@ -1,0 +1,49 @@
+:root { --active-color: #00ffcc; --bg: #050505; }
+body { background: var(--bg); color: #fff; font-family: 'Share Tech Mono', monospace; margin: 0; display: flex; height: 100vh; }
+
+#side-panel { width: 260px; border-right: 1px solid #222; background: rgba(5,5,5,0.9); z-index: 1000; display: flex; flex-direction: column; }
+.module { padding: 20px; border-bottom: 1px solid #222; }
+.label { font-size: 0.6rem; color: #444; letter-spacing: 2px; }
+.timer-val { font-size: 2.8rem; color: var(--active-color); }
+
+#map { flex: 1; background: #000; } /* 地図背景を真っ黒に */
+
+/* Leafletのタイル（地図）をモノクロ・反転させるフィルター */
+.leaflet-tile-container {
+    filter: invert(100%) hue-rotate(180deg) brightness(30%) contrast(90%);
+}
+
+button#start { 
+    width: 100%; padding: 15px; background: #111; border: 1px solid #444; 
+    color: #fff; cursor: pointer; font-family: inherit; margin-top: 10px;
+}
+button#start.active { border-color: var(--active-color); color: var(--active-color); }
+
+/* ポップアップやラベルのカスタマイズ */
+.leaflet-tooltip {
+    background: transparent; border: none; box-shadow: none;
+    color: #555; font-family: 'Share Tech Mono'; font-size: 10px;
+}
+.major-label { color: #fff !important; font-size: 12px !important; font-weight: bold; }
+
+.station-label {
+    background: transparent !important;
+    border: none !important;
+    box-shadow: none !important;
+    color: #666;
+    font-family: 'Share Tech Mono', monospace;
+    transition: all 0.2s ease;
+    white-space: nowrap;
+    pointer-events: none;
+}
+
+/* 主要駅だけ最初は少し目立たせる */
+.major-label {
+    color: #00ffcc !important;
+    text-shadow: 0 0 5px rgba(0,255,204,0.5);
+}
+
+/* 地図のダークモード加工 */
+.leaflet-tile-container {
+    filter: invert(100%) hue-rotate(180deg) brightness(20%) contrast(100%);
+}
